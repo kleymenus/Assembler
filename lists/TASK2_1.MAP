@@ -1,0 +1,12 @@
+
+ Start  Stop   Length Name               Class
+
+ 00000H 00191H 00192H HEAP               
+ 001A0H 0029FH 00100H STK                
+ 002A0H 002E5H 00046H DATA               
+ 002F0H 004A9H 001BAH CODE               
+ 004AAH 00566H 000BDH AUX_SEG            
+
+Program entry point at 002F:0048
+Warning: No stack
+

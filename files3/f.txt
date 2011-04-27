@@ -1,0 +1,6 @@
+hi hello
+update refresh clear
+2hihihi
+terminal console tty
+4815162342
+vim geany emacs eclipse  kate

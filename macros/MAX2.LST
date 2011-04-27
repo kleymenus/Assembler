@@ -1,0 +1,729 @@
+Turbo Assembler	 Version 2.5	    02/16/11 21:51:14	    Page 1
+MAX2.ASM
+
+
+
+      1				     include io.asm
+1     2				     .xlist
+1     3				     ;--------------------------------------
+1     4				     ;	Завершение работы программы
+1     5				     ;--------------------------------------
+1     6				     finish  MACRO
+1     7
+1     8					     MOV     AX,4C00h
+1     9					     INT     21h
+1    10
+1    11					     ENDM
+1    12				     ;--------------------------------------
+1    13				     ;	Переход на новую строку
+1    14				     ;--------------------------------------
+1    15					     EXTRN   _newline:FAR
+1    16
+1    17				     newline MACRO
+1    18
+1    19					     CALL    _newline
+1    20
+1    21					     ENDM
+1    22				     ;--------------------------------------
+1    23				     ;	Вывод символа
+1    24				     ;	     Обращение: outch c
+1    25				     ;	  c - i8, r8, m8
+1    26				     ;--------------------------------------
+1    27				     outch   MACRO   c
+1    28
+1    29					     PUSH    DX
+1    30					     PUSH    AX
+1    31					     MOV     DL,c
+1    32					     MOV     AH,2
+1    33					     INT     21h
+1    34					     POP     AX
+1    35					     POP     DX
+1    36
+1    37					     ENDM
+1    38				     ;--------------------------------------
+1    39				     ;	Вывод строки	символов
+1    40				     ;	  In:  ds:dx - начальный адрес строки
+1    41				     ;	Замечание: строка должна заканчиваться
+1    42				     ;	  символом '$'.
+1    43				     ;--------------------------------------
+1    44				     outstr  MACRO
+1    45
+1    46					     PUSH    AX
+1    47					     MOV     AH,09h
+1    48					     INT     21h
+1    49					     POP     AX
+1    50
+1    51					     ENDM
+1    52				     ;--------------------------------------
+1    53				     ;	Вывод целого	со знаком размером в слово
+1    54				     ;	     Обращение:  outint num [,leng]
+1    55				     ;	       num  - выводимое число i16, r16, m16
+1    56				     ;	       leng - ширина поля вывода i8, r8, m8
+1    57				     ;	Замечание:
+Turbo Assembler	 Version 2.5	    02/16/11 21:51:14	    Page 2
+MAX2.ASM
+
+
+
+1    58				     ;	  если поле больше, чем надо, то	слева
+1    59				     ;	  добавляются пробелы,
+1    60				     ;	  если меньше	- выводится только число (полностью)
+1    61				     ;	  leng=0 по умолчанию
+1    62				     ;--------------------------------------
+1    63					     EXTRN   _outint:FAR
+1    64
+1    65				     outint  MACRO   num,leng
+1    66
+1    67					     outnum  <num>,<leng>,1
+1    68
+1    69					     ENDM
+1    70				     ;--------------------------------------
+1    71				     ;	Вывод целого	без знака размером в слово
+1    72				     ;	     Обращение: outword num [,leng]
+1    73				     ;--------------------------------------
+1    74				     outword MACRO   num,leng
+1    75
+1    76					     outnum  <num>,<leng>,0
+1    77
+1    78					     ENDM
+1    79				     ;--------------------------------------
+1    80				     ; Вспомогательный макрос проверки
+1    81				     ; написания имени разными (большими
+1    82				     ; и малыми)	буквами
+1    83				     ;--------------------------------------
+1    84				     same    MACRO   name,variants,ans
+1    85
+1    86					     ans=0
+1    87					     IRP     v,<variants>
+1    88					     IFIDN   <name>,<v>
+1    89					     ans=1
+1    90					     EXITM
+1    91					     ENDIF
+1    92					     ENDM
+1    93
+1    94					     ENDM
+1    95				     ;--------------------------------------
+1    96				     ; Вспомогательный макрос для outint и outword
+1    97				     ;--------------------------------------
+1    98				     outnum  MACRO   num,leng,sign
+1    99
+1   100					     LOCAL   regdx?
+1   101					     PUSH    AX
+1   102					     PUSH    DX
+1   103					     same    <num>,<dx,DX,Dx,dX>,regdx?
+1   104					     IF	     regdx?
+1   105						     IFB     <leng>
+1   106							     MOV     AL,0
+1   107						     ELSE
+1   108							     MOV     AL,leng
+1   109						     ENDIF
+1   110						     XCHG    AX,DX
+1   111					     ELSE
+1   112						     IFB     <leng>
+1   113							     MOV     DL,0
+1   114						     ELSE
+Turbo Assembler	 Version 2.5	    02/16/11 21:51:14	    Page 3
+MAX2.ASM
+
+
+
+1   115							     MOV     DL,leng
+1   116						     ENDIF
+1   117						     MOV     AX,num
+1   118					     ENDIF
+1   119					     MOV     DH,sign
+1   120					     CALL    _outint
+1   121					     POP     DX
+1   122					     POP     AX
+1   123
+1   124					     ENDM
+1   125				     ;--------------------------------------
+1   126				     ;	Очистка буфера ввода с клавиатуры
+1   127				     ;--------------------------------------
+1   128					     EXTRN   _flush:FAR
+1   129
+1   130				     flush   MACRO
+1   131
+1   132					     CALL    _flush
+1   133
+1   134					     ENDM
+1   135				     ;--------------------------------------
+1   136				     ; Ввод	символа (без Enter)
+1   137				     ;	     Обращение: inch x
+1   138				     ;	 x - r8, m8
+1   139				     ; Out: x -	введенный символ
+1   140				     ;--------------------------------------
+1   141					     EXTRN   _inch:FAR
+1   142
+1   143				     inch    MACRO   x
+1   144
+1   145					     LOCAL   regax?
+1   146					     same    <x>,<ah,AH,Ah,aH>,regax?
+1   147					     IF	     regax?
+1   148						     XCHG    AH,AL
+1   149						     MOV     AL,0
+1   150						     CALL    _inch
+1   151						     XCHG    AH,AL
+1   152					     ELSE
+1   153						     same    <x>,<al,AL,Al,aL>,regax?
+1   154						     IF	     regax?
+1   155							     MOV     AL,0
+1   156							     CALL    _inch
+1   157						     ELSE
+1   158							     PUSH    AX
+1   159							     MOV     AL,0
+1   160							     CALL    _inch
+1   161							     MOV     x,AL
+1   162							     POP     AX
+1   163						     ENDIF
+1   164					     ENDIF
+1   165
+1   166					     ENDM
+1   167
+1   168				     ;--------------------------------------
+1   169				     ;	Ввод целого числа размером в слово
+1   170				     ;	     Обращение: inint x
+1   171				     ;	  x - r16, m16
+Turbo Assembler	 Version 2.5	    02/16/11 21:51:14	    Page 4
+MAX2.ASM
+
+
+
+1   172				     ;	Out: x - введенное число
+1   173				     ;	Замечание:
+1   174				     ;	  пропускаются все пробелы и концы
+1   175				     ;	  строк перед	числом;
+1   176				     ;	  число должно начинаться с цифры или
+1   177				     ;	  знака;
+1   178				     ;	  ввод идет до первой нецифры(в	т.ч. до Enter);
+1   179				     ;	  при ошибке программа завершается	с
+1   180				     ;	  аварийным сообщением.
+1   181				     ;--------------------------------------
+1   182					     EXTRN   _inint:FAR
+1   183
+1   184				     inint   MACRO   x
+1   185
+1   186					     LOCAL   regax?
+1   187					     same    <x>,<ax,AX,Ax,aX>,regax?
+1   188					     IF	     regax?
+1   189					     CALL    _inint
+1   190					     ELSE
+1   191					     PUSH    AX
+1   192					     CALL    _inint
+1   193					     MOV     x,AX
+1   194					     POP     AX
+1   195					     ENDIF
+1   196
+1   197					     ENDM
+1   198				     ;--------------------------------------
+1   199				     .list
+1   200
+    201
+    202				     cout macro	str1
+    203					     irpc p, str1
+    204						     outch '&p&'
+    205					     endm
+    206				     endm
+    207
+    208				     max macro a, b, c
+    209					     local _max_a, _brk
+    210
+    211					     push ax
+    212
+    213					     mov ax, a
+    214					     cmp ax, b
+    215					     jg	_max_a
+    216						     mov ax, b
+    217						     mov c, ax
+    218						     jmp _brk
+    219					     _max_a:
+    220						     mov ax, a
+    221						     mov c, ax
+    222					     _brk:
+    223
+    224					     pop ax
+    225				     endm
+    226
+    227	0000			     stk segment stack
+    228	0000  0100*(??)			     db	100h dup(?)
+Turbo Assembler	 Version 2.5	    02/16/11 21:51:14	    Page 5
+MAX2.ASM
+
+
+
+    229	0100			     stk ends
+    230
+    231	0000			     data segment
+    232					     ;---Constants---
+    233					     ;---Variables---
+    234	0000  ????			     x dw ?
+    235	0002  ????			     y dw ?
+    236	0004  ????			     z dw ?
+    237	0006			     data ends
+    238
+    239	0000			     code segment
+    240					     assume ds:data, cs:code, ss:stk
+    241
+    242	0000				     main proc
+    243
+    244	0000  1E				     push ds				     ;помещение ds в стек	stk,+
+    245				     в	ds находится смещение,	по которому находится	    +
+    246				     префикс сегмента кода
+    247	0001  2B C0				     sub ax,ax				     ;ax = ax-ax => ax=0;
+    248	0003  50				     push ax				     ;помещенние ax в стек stk
+    249
+    250	0004  B8 0000s				     mov ax, data			     ;ax = data
+    251	0007  8E D8				     mov ds, ax				     ;ds = ax
+    252						     ;-------user code--------
+    253						     cout Insert_numbers:
+1   254					     irpc p, Insert_numbers:
+1   255						     outch '&p&'
+1   256					     endm
+2   257						     outch 'I'
+3   258
+3   259	0009  52			     PUSH    DX
+3   260	000A  50			     PUSH    AX
+3   261	000B  B2 49			     MOV     DL,'I'
+3   262	000D  B4 02			     MOV     AH,2
+3   263	000F  CD 21			     INT     21h
+3   264	0011  58			     POP     AX
+3   265	0012  5A			     POP     DX
+3   266
+2   267						     outch 'n'
+3   268
+3   269	0013  52			     PUSH    DX
+3   270	0014  50			     PUSH    AX
+3   271	0015  B2 6E			     MOV     DL,'n'
+3   272	0017  B4 02			     MOV     AH,2
+3   273	0019  CD 21			     INT     21h
+3   274	001B  58			     POP     AX
+3   275	001C  5A			     POP     DX
+3   276
+2   277						     outch 's'
+3   278
+3   279	001D  52			     PUSH    DX
+3   280	001E  50			     PUSH    AX
+3   281	001F  B2 73			     MOV     DL,'s'
+3   282	0021  B4 02			     MOV     AH,2
+3   283	0023  CD 21			     INT     21h
+3   284	0025  58			     POP     AX
+3   285	0026  5A			     POP     DX
+Turbo Assembler	 Version 2.5	    02/16/11 21:51:14	    Page 6
+MAX2.ASM
+
+
+
+3   286
+2   287						     outch 'e'
+3   288
+3   289	0027  52			     PUSH    DX
+3   290	0028  50			     PUSH    AX
+3   291	0029  B2 65			     MOV     DL,'e'
+3   292	002B  B4 02			     MOV     AH,2
+3   293	002D  CD 21			     INT     21h
+3   294	002F  58			     POP     AX
+3   295	0030  5A			     POP     DX
+3   296
+2   297						     outch 'r'
+3   298
+3   299	0031  52			     PUSH    DX
+3   300	0032  50			     PUSH    AX
+3   301	0033  B2 72			     MOV     DL,'r'
+3   302	0035  B4 02			     MOV     AH,2
+3   303	0037  CD 21			     INT     21h
+3   304	0039  58			     POP     AX
+3   305	003A  5A			     POP     DX
+3   306
+2   307						     outch 't'
+3   308
+3   309	003B  52			     PUSH    DX
+3   310	003C  50			     PUSH    AX
+3   311	003D  B2 74			     MOV     DL,'t'
+3   312	003F  B4 02			     MOV     AH,2
+3   313	0041  CD 21			     INT     21h
+3   314	0043  58			     POP     AX
+3   315	0044  5A			     POP     DX
+3   316
+2   317						     outch '_'
+3   318
+3   319	0045  52			     PUSH    DX
+3   320	0046  50			     PUSH    AX
+3   321	0047  B2 5F			     MOV     DL,'_'
+3   322	0049  B4 02			     MOV     AH,2
+3   323	004B  CD 21			     INT     21h
+3   324	004D  58			     POP     AX
+3   325	004E  5A			     POP     DX
+3   326
+2   327						     outch 'n'
+3   328
+3   329	004F  52			     PUSH    DX
+3   330	0050  50			     PUSH    AX
+3   331	0051  B2 6E			     MOV     DL,'n'
+3   332	0053  B4 02			     MOV     AH,2
+3   333	0055  CD 21			     INT     21h
+3   334	0057  58			     POP     AX
+3   335	0058  5A			     POP     DX
+3   336
+2   337						     outch 'u'
+3   338
+3   339	0059  52			     PUSH    DX
+3   340	005A  50			     PUSH    AX
+3   341	005B  B2 75			     MOV     DL,'u'
+3   342	005D  B4 02			     MOV     AH,2
+Turbo Assembler	 Version 2.5	    02/16/11 21:51:14	    Page 7
+MAX2.ASM
+
+
+
+3   343	005F  CD 21			     INT     21h
+3   344	0061  58			     POP     AX
+3   345	0062  5A			     POP     DX
+3   346
+2   347						     outch 'm'
+3   348
+3   349	0063  52			     PUSH    DX
+3   350	0064  50			     PUSH    AX
+3   351	0065  B2 6D			     MOV     DL,'m'
+3   352	0067  B4 02			     MOV     AH,2
+3   353	0069  CD 21			     INT     21h
+3   354	006B  58			     POP     AX
+3   355	006C  5A			     POP     DX
+3   356
+2   357						     outch 'b'
+3   358
+3   359	006D  52			     PUSH    DX
+3   360	006E  50			     PUSH    AX
+3   361	006F  B2 62			     MOV     DL,'b'
+3   362	0071  B4 02			     MOV     AH,2
+3   363	0073  CD 21			     INT     21h
+3   364	0075  58			     POP     AX
+3   365	0076  5A			     POP     DX
+3   366
+2   367						     outch 'e'
+3   368
+3   369	0077  52			     PUSH    DX
+3   370	0078  50			     PUSH    AX
+3   371	0079  B2 65			     MOV     DL,'e'
+3   372	007B  B4 02			     MOV     AH,2
+3   373	007D  CD 21			     INT     21h
+3   374	007F  58			     POP     AX
+3   375	0080  5A			     POP     DX
+3   376
+2   377						     outch 'r'
+3   378
+3   379	0081  52			     PUSH    DX
+3   380	0082  50			     PUSH    AX
+3   381	0083  B2 72			     MOV     DL,'r'
+3   382	0085  B4 02			     MOV     AH,2
+3   383	0087  CD 21			     INT     21h
+3   384	0089  58			     POP     AX
+3   385	008A  5A			     POP     DX
+3   386
+2   387						     outch 's'
+3   388
+3   389	008B  52			     PUSH    DX
+3   390	008C  50			     PUSH    AX
+3   391	008D  B2 73			     MOV     DL,'s'
+3   392	008F  B4 02			     MOV     AH,2
+3   393	0091  CD 21			     INT     21h
+3   394	0093  58			     POP     AX
+3   395	0094  5A			     POP     DX
+3   396
+2   397						     outch ':'
+3   398
+3   399	0095  52			     PUSH    DX
+Turbo Assembler	 Version 2.5	    02/16/11 21:51:14	    Page 8
+MAX2.ASM
+
+
+
+3   400	0096  50			     PUSH    AX
+3   401	0097  B2 3A			     MOV     DL,':'
+3   402	0099  B4 02			     MOV     AH,2
+3   403	009B  CD 21			     INT     21h
+3   404	009D  58			     POP     AX
+3   405	009E  5A			     POP     DX
+3   406
+    407						     newline
+1   408
+1   409	009F  9A 00000000se		     CALL    _newline
+1   410
+    411
+    412						     inint x
+1   413
+1   414					     LOCAL   regax?
+1   415					     same    <x>,<ax,AX,Ax,aX>,regax?
+2   416
+2   417	      =	0000			     regax?=0
+2   418					     IRP     v,<ax,AX,Ax,aX>
+2   419					     IFIDN   <x>,<v>
+2   420					     regax?=1
+2   421					     EXITM
+2   422					     ENDIF
+2   423					     ENDM
+3   424					     IFIDN   <x>,<ax>
+3   425					     regax?=1
+3   426					     EXITM
+3   427					     ENDIF
+3   428					     IFIDN   <x>,<AX>
+3   429					     regax?=1
+3   430					     EXITM
+3   431					     ENDIF
+3   432					     IFIDN   <x>,<Ax>
+3   433					     regax?=1
+3   434					     EXITM
+3   435					     ENDIF
+3   436					     IFIDN   <x>,<aX>
+3   437					     regax?=1
+3   438					     EXITM
+3   439					     ENDIF
+2   440
+1   441					     IF	     regax?
+1   442					     CALL    _inint
+1   443					     ELSE
+1   444	00A4  50			     PUSH    AX
+1   445	00A5  9A 00000000se		     CALL    _inint
+1   446	00AA  A3 0000r			     MOV     x,AX
+1   447	00AD  58			     POP     AX
+1   448					     ENDIF
+1   449
+    450						     inint y
+1   451
+1   452					     LOCAL   regax?
+1   453					     same    <y>,<ax,AX,Ax,aX>,regax?
+2   454
+2   455	      =	0000			     regax?=0
+2   456					     IRP     v,<ax,AX,Ax,aX>
+Turbo Assembler	 Version 2.5	    02/16/11 21:51:14	    Page 9
+MAX2.ASM
+
+
+
+2   457					     IFIDN   <y>,<v>
+2   458					     regax?=1
+2   459					     EXITM
+2   460					     ENDIF
+2   461					     ENDM
+3   462					     IFIDN   <y>,<ax>
+3   463					     regax?=1
+3   464					     EXITM
+3   465					     ENDIF
+3   466					     IFIDN   <y>,<AX>
+3   467					     regax?=1
+3   468					     EXITM
+3   469					     ENDIF
+3   470					     IFIDN   <y>,<Ax>
+3   471					     regax?=1
+3   472					     EXITM
+3   473					     ENDIF
+3   474					     IFIDN   <y>,<aX>
+3   475					     regax?=1
+3   476					     EXITM
+3   477					     ENDIF
+2   478
+1   479					     IF	     regax?
+1   480					     CALL    _inint
+1   481					     ELSE
+1   482	00AE  50			     PUSH    AX
+1   483	00AF  9A 00000000se		     CALL    _inint
+1   484	00B4  A3 0002r			     MOV     y,AX
+1   485	00B7  58			     POP     AX
+1   486					     ENDIF
+1   487
+    488
+    489						     max x, y, z
+1   490
+1   491	00B8  50			     push ax
+1   492
+1   493	00B9  A1 0000r			     mov ax, x
+1   494	00BC  3B 06 0002r		     cmp ax, y
+1   495	00C0  7F 09			     jg	??0000
+1   496	00C2  A1 0002r				     mov ax, y
+1   497	00C5  A3 0004r				     mov z, ax
+1   498	00C8  EB 07 90				     jmp ??0001
+1   499	00CB				     ??0000:
+1   500	00CB  A1 0000r				     mov ax, x
+1   501	00CE  A3 0004r				     mov z, ax
+1   502	00D1				     ??0001:
+1   503
+1   504	00D1  58			     pop ax
+    505
+    506						     cout Max:
+1   507					     irpc p, Max:
+1   508						     outch '&p&'
+1   509					     endm
+2   510						     outch 'M'
+3   511
+3   512	00D2  52			     PUSH    DX
+3   513	00D3  50			     PUSH    AX
+Turbo Assembler	 Version 2.5	    02/16/11 21:51:14	    Page 10
+MAX2.ASM
+
+
+
+3   514	00D4  B2 4D			     MOV     DL,'M'
+3   515	00D6  B4 02			     MOV     AH,2
+3   516	00D8  CD 21			     INT     21h
+3   517	00DA  58			     POP     AX
+3   518	00DB  5A			     POP     DX
+3   519
+2   520						     outch 'a'
+3   521
+3   522	00DC  52			     PUSH    DX
+3   523	00DD  50			     PUSH    AX
+3   524	00DE  B2 61			     MOV     DL,'a'
+3   525	00E0  B4 02			     MOV     AH,2
+3   526	00E2  CD 21			     INT     21h
+3   527	00E4  58			     POP     AX
+3   528	00E5  5A			     POP     DX
+3   529
+2   530						     outch 'x'
+3   531
+3   532	00E6  52			     PUSH    DX
+3   533	00E7  50			     PUSH    AX
+3   534	00E8  B2 78			     MOV     DL,'x'
+3   535	00EA  B4 02			     MOV     AH,2
+3   536	00EC  CD 21			     INT     21h
+3   537	00EE  58			     POP     AX
+3   538	00EF  5A			     POP     DX
+3   539
+2   540						     outch ':'
+3   541
+3   542	00F0  52			     PUSH    DX
+3   543	00F1  50			     PUSH    AX
+3   544	00F2  B2 3A			     MOV     DL,':'
+3   545	00F4  B4 02			     MOV     AH,2
+3   546	00F6  CD 21			     INT     21h
+3   547	00F8  58			     POP     AX
+3   548	00F9  5A			     POP     DX
+3   549
+    550						     outint z
+1   551
+1   552					     outnum  <z>,<>,1
+2   553
+2   554					     LOCAL   regdx?
+2   555	00FA  50			     PUSH    AX
+2   556	00FB  52			     PUSH    DX
+2   557					     same    <z>,<dx,DX,Dx,dX>,regdx?
+3   558
+3   559	      =	0000			     regdx?=0
+3   560					     IRP     v,<dx,DX,Dx,dX>
+3   561					     IFIDN   <z>,<v>
+3   562					     regdx?=1
+3   563					     EXITM
+3   564					     ENDIF
+3   565					     ENDM
+4   566					     IFIDN   <z>,<dx>
+4   567					     regdx?=1
+4   568					     EXITM
+4   569					     ENDIF
+4   570					     IFIDN   <z>,<DX>
+Turbo Assembler	 Version 2.5	    02/16/11 21:51:14	    Page 11
+MAX2.ASM
+
+
+
+4   571					     regdx?=1
+4   572					     EXITM
+4   573					     ENDIF
+4   574					     IFIDN   <z>,<Dx>
+4   575					     regdx?=1
+4   576					     EXITM
+4   577					     ENDIF
+4   578					     IFIDN   <z>,<dX>
+4   579					     regdx?=1
+4   580					     EXITM
+4   581					     ENDIF
+3   582
+2   583					     IF	     regdx?
+2   584						     IFB     <>
+2   585							     MOV     AL,0
+2   586						     ELSE
+2   587							     MOV     AL,
+2   588						     ENDIF
+2   589						     XCHG    AX,DX
+2   590					     ELSE
+2   591						     IFB     <>
+2   592	00FC  B2 00					     MOV     DL,0
+2   593						     ELSE
+2   594							     MOV     DL,
+2   595						     ENDIF
+2   596	00FE  A1 0004r				     MOV     AX,z
+2   597					     ENDIF
+2   598	0101  B6 01			     MOV     DH,1
+2   599	0103  9A 00000000se		     CALL    _outint
+2   600	0108  5A			     POP     DX
+2   601	0109  58			     POP     AX
+2   602
+1   603
+    604
+    605						     newline
+1   606
+1   607	010A  9A 00000000se		     CALL    _newline
+1   608
+    609
+    610
+    611						     ;------------------------
+    612						     finish				     ;завершение работы	    +
+    613				     приложения
+1   614
+1   615	010F  B8 4C00			     MOV     AX,4C00h
+1   616	0112  CD 21			     INT     21h
+1   617
+    618
+    619	0114				     main endp
+    620	0114			     code ends
+    621
+    622				     end main		     ;точка входа в программу
+Turbo Assembler	 Version 2.5	    02/16/11 21:51:14	    Page 12
+Symbol Table
+
+
+
+
+Symbol Name			  Type	 Value
+
+??0000				  Near	 CODE:00CB
+??0001				  Near	 CODE:00D1
+??DATE				  Text	 "02/16/11"
+??FILENAME			  Text	 "MAX2	  "
+??TIME				  Text	 "21:51:14"
+??VERSION			  Number 0205
+@CPU				  Text	 0101H
+@CURSEG				  Text	 CODE
+@FILENAME			  Text	 MAX2
+@WORDSIZE			  Text	 2
+MAIN				  Near	 CODE:0000
+REGAX?				  Number 0000
+REGDX?				  Number 0000
+X				  Word	 DATA:0000
+Y				  Word	 DATA:0002
+Z				  Word	 DATA:0004
+_FLUSH				  Far	 ----:---- Extern
+_INCH				  Far	 ----:---- Extern
+_ININT				  Far	 ----:---- Extern
+_NEWLINE			  Far	 ----:---- Extern
+_OUTINT				  Far	 ----:---- Extern
+
+Macro Name
+
+COUT
+FINISH
+FLUSH
+INCH
+ININT
+MAX
+NEWLINE
+OUTCH
+OUTINT
+OUTNUM
+OUTSTR
+OUTWORD
+SAME
+
+Groups & Segments		  Bit Size Align  Combine Class
+
+CODE				  16  0114 Para	  none
+DATA				  16  0006 Para	  none
+STK				  16  0100 Para	  Stack
+

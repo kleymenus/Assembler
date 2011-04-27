@@ -1,0 +1,5 @@
+hi hello
+update refresh clear
+terminal console tty
+vim geany emacs eclipse  kate
+
